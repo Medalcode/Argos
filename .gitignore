@@ -1,0 +1,5 @@
+.env
+__pycache__/
+estado_bot.json
+*.log
+venv/
