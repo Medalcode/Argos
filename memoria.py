@@ -12,7 +12,7 @@ def cargar_estado():
         except json.JSONDecodeError:
             pass # Si el archivo está corrupto, retorna estado default
             
-    return {"posicion_abierta": False, "precio_compra": 0.0, "cantidad": 0.0}
+    return {"posicion_abierta": False, "precio_compra": 0.0, "max_precio": 0.0, "pnl_acumulado": 0.0, "operaciones_hoy": 0}
 
 def guardar_estado(estado):
     with open(ESTADO_FILE, 'w') as f:

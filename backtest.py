@@ -1,0 +1,127 @@
+import ccxt
+import pandas as pd
+import pandas_ta as ta
+import time
+from datetime import datetime
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Configuración
+SYMBOL = os.getenv('SYMBOL', 'BTC/USDT')
+TIMEFRAME = '15m'
+# Queremos bajar suficientes datos. Binance permite 1000 por request.
+# Vamos a intentar bajar 4000 velas (~1000 horas = 41 días)
+CANDLES_LIMIT = 1000 
+TOTAL_CHUNKS = 4 # 4 * 1000 = 4000 velas
+
+SL = float(os.getenv('STOP_LOSS_PCT', 0.02))
+TP = float(os.getenv('TAKE_PROFIT_PCT', 0.04))
+
+exchange = ccxt.binance()
+
+def fetch_historical_data():
+    print(f"⏳ Descargando datos históricos para {SYMBOL} ({TIMEFRAME})...")
+    
+    all_ohlcv = []
+    # Fecha de inicio: Unas 4000 velas atrás aprox
+    # 15 min * 4000 = 60000 min = 1000 horas = 41 días
+    # timestamp en ms
+    since = exchange.milliseconds() - (4000 * 15 * 60 * 1000)
+    
+    for i in range(TOTAL_CHUNKS):
+        print(f"   📡 Bajando bloque {i+1}/{TOTAL_CHUNKS}...")
+        try:
+            ohlcv = exchange.fetch_ohlcv(SYMBOL, TIMEFRAME, limit=CANDLES_LIMIT, since=since)
+            if not ohlcv:
+                break
+            
+            all_ohlcv.extend(ohlcv)
+            # Actualizamos 'since' para la siguiente petición (último tiempo + 1 vela)
+            since = ohlcv[-1][0] + 1
+            time.sleep(1) # Respetar rate limit
+            
+        except Exception as e:
+            print(f"❌ Error descargando: {e}")
+            break
+            
+    df = pd.DataFrame(all_ohlcv, columns=['ts', 'open', 'high', 'low', 'close', 'vol'])
+    df['datetime'] = pd.to_datetime(df['ts'], unit='ms')
+    
+    # Calcular Indicadores igual que en el bot
+    df['RSI'] = ta.rsi(df['close'], length=14)
+    
+    return df
+
+def run_backtest(df):
+    print(f"\n🧪 Iniciando Backtest sobre {len(df)} velas...")
+    print(f"   Desde: {df['datetime'].iloc[0]}")
+    print(f"   Hasta: {df['datetime'].iloc[-1]}")
+    
+    saldo_inicial = 1000.0 # USDT
+    saldo = saldo_inicial
+    posicion = None # None o dict con precio_compra
+    
+    operaciones = []
+    win_count = 0
+    loss_count = 0
+    
+    for i in range(14, len(df)):
+        row = df.iloc[i]
+        precio = row['close']
+        rsi = row['RSI']
+        ts = row['datetime']
+        
+        if posicion is None:
+            # --- LÓGICA DE COMPRA ---
+            if rsi < 30:
+                # Compramos
+                posicion = {
+                    'precio': precio,
+                    'fecha': ts
+                }
+                # No restamos del saldo todavía, calculamos PnL al cerrar
+        
+        else:
+            # --- LÓGICA DE VENTA ---
+            precio_entrada = posicion['precio']
+            
+            # Stop Loss
+            if precio <= precio_entrada * (1 - SL):
+                pnl = (precio - precio_entrada) / precio_entrada
+                resultado = saldo * pnl # Ganancia/Pérdida en $
+                saldo += resultado
+                
+                operaciones.append({'tipo': 'SL', 'pnl_pct': pnl, 'fecha': ts})
+                loss_count += 1
+                posicion = None
+                
+            # Take Profit
+            elif precio >= precio_entrada * (1 + TP):
+                pnl = (precio - precio_entrada) / precio_entrada
+                resultado = saldo * pnl
+                saldo += resultado
+                
+                operaciones.append({'tipo': 'TP', 'pnl_pct': pnl, 'fecha': ts})
+                win_count += 1
+                posicion = None
+
+    # Resultados Finales
+    print("\n📊 --- RESULTADOS DEL BACKTEST ---")
+    print(f"💰 Saldo Inicial: ${saldo_inicial:.2f}")
+    print(f"💰 Saldo Final:   ${saldo:.2f}")
+    total_ops = win_count + loss_count
+    rentabilidad = ((saldo - saldo_inicial) / saldo_inicial) * 100
+    
+    color = "🟢" if rentabilidad > 0 else "🔴"
+    print(f"{color} Rentabilidad: {rentabilidad:.2f}%")
+    print(f"🔄 Operaciones Totales: {total_ops}")
+    if total_ops > 0:
+        print(f"✅ Ganadas: {win_count} ({(win_count/total_ops)*100:.1f}%)")
+        print(f"❌ Perdidas: {loss_count} ({(loss_count/total_ops)*100:.1f}%)")
+
+if __name__ == "__main__":
+    df = fetch_historical_data()
+    if not df.empty:
+        run_backtest(df)
