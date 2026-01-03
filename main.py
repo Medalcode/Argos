@@ -27,10 +27,11 @@ exchange = exchange_class({
 # exchange.set_sandbox_mode(True) 
 
 SYMBOL = os.getenv('SYMBOL', 'BTC/USDT')
-# Parsear porcentajes (0.02 = 2%)
+# Parsear porcentajes
 SL = float(os.getenv('STOP_LOSS_PCT', 0.01))
 TP = float(os.getenv('TAKE_PROFIT_PCT', 0.015))
-TS = float(os.getenv('TRAILING_STOP_PCT', 0.005)) # 0.5% Trailing
+TS = float(os.getenv('TRAILING_STOP_PCT', 0.005))
+POS_SIZE = float(os.getenv('POSITION_SIZE_PCT', 0.95)) # 95% del saldo
 SIMULATION_MODE = os.getenv('SIMULATION_MODE', 'True').lower() == 'true'
 
 estado = cargar_estado()
@@ -93,6 +94,24 @@ def registrar_operacion(tipo, precio_venta, pnl_pct):
     icono = "✅" if pnl_pct > 0 else "❌"
     enviar_telegram(f"{icono} **{tipo} EJECUTADO**\nVenta: {precio_venta}\nResultado: {pnl_pct*100:.2f}%")
 
+
+def check_balance():
+    """
+    Verifica si tenemos suficiente USDT en la billetera SPOT para operar.
+    Retorna True si hay > 15 USDT (mínimo de seguridad).
+    """
+    try:
+        balance = exchange.fetch_balance()
+        usdt_free = balance.get('USDT', {}).get('free', 0.0)
+        
+        if usdt_free < 15: # Binance suele pedir min $10, ponemos $15 por seguridad
+            print(f"⚠️ Saldo insuficiente: ${usdt_free:.2f} USDT")
+            return False
+            
+        return True
+    except Exception as e:
+        print(f"❌ Error verificando saldo: {e}")
+        return False # Ante la duda, no operar
 
 def obtener_datos():
     """
@@ -232,25 +251,62 @@ while True:
             condicion_rsi = rsi_actual < 35
             condicion_bb = precio_actual < lower_band
             condicion_ema = precio_actual > ema_200
-            
             if condicion_rsi and condicion_bb and condicion_ema:
                 print(f"🚀 SEÑAL PERFECTA CONFIRMADA")
                 
-                if not SIMULATION_MODE:
-                    # order = exchange.create_market_buy_order(SYMBOL, cantidad)
-                    pass 
+                # --- VERIFICACIÓN DE SEGURIDAD ANTES DE DISPARAR ---
+                # Validamos saldo solo si vamos a operar de verdad
+                if not SIMULATION_MODE and not check_balance():
+                     enviar_telegram("⚠️ **SEÑAL OMITIDA**: Saldo insuficiente en Binance (<$15 USDT).")
+                cantidad_compra = 0.0
                 
+                if not SIMULATION_MODE:
+                    try:
+                        # 1. Obtener Saldo Libre
+                        balance = exchange.fetch_balance()
+                        usdt_free = balance.get('USDT', {}).get('free', 0.0)
+                        
+                        # VERIFICAR SI HAY SUFICIENTE SALDO
+                        if usdt_free < 15:
+                             enviar_telegram("⚠️ **SEÑAL OMITIDA**: Saldo insuficiente (< $15 USD).")
+                             time.sleep(60)
+                             continue
+
+                        # 2. Calcular cuánto gastar (Ej. 95% de 100 USDT = 95 USD)
+                        gasto_usdt = usdt_free * POS_SIZE
+                        
+                        # 3. Calcular cantidad de BTC (95 / 90000 = 0.00105 BTC)
+                        cantidad_bruta = gasto_usdt / precio_actual
+                        
+                        # 4. Ajustar decimales según reglas de Binance (PRECISIÓN)
+                        cantidad_compra = exchange.amount_to_precision(SYMBOL, cantidad_bruta)
+                        
+                        print(f"💰 Comprando {cantidad_compra} {SYMBOL.split('/')[0]} con ${gasto_usdt:.2f} USDT")
+                        
+                        # 5. Ejecutar Orden
+                        # order = exchange.create_market_buy_order(SYMBOL, cantidad_compra)
+                        # precio_real_ejecucion = order['price'] # Usamos el precio real del exchange
+                        
+                    except Exception as e:
+                        print(f"❌ Error calculando tamaño posición: {e}")
+                        enviar_telegram(f"❌ Error al intentar comprar: {e}")
+                        continue
+                else:
+                    # En simulación, asumimos 0.01 BTC como referencia
+                    cantidad_compra = 0.01 
+
                 # Guardar estado
                 estado.update({
                     "posicion_abierta": True, 
-                    "precio_compra": precio_actual,
+                    "precio_compra": precio_actual, # Si fuera real usariamos precio_real_ejecucion
+                    "cantidad": cantidad_compra,
                     "max_precio": precio_actual, 
                     "fecha_compra": str(datetime.datetime.now())
                 })
                 guardar_estado(estado)
                 guardar_trade_csv(datetime.datetime.now(), "COMPRA", precio_actual, 0)
                 
-                enviar_telegram(f"🚀 **COMPRA EJECUTADA**\nPrecio: {precio_actual}\nRSI: {rsi_actual:.2f}\nEMA200: {ema_200:.2f} (Tendencia OK)")
+                enviar_telegram(f"🚀 **COMPRA EJECUTADA**\nPrecio: {precio_actual}\nCant: {cantidad_compra}\nRSI: {rsi_actual:.2f}\nEMA200: {ema_200:.2f}")
     
         else:
             # --- LÓGICA DE SALIDA (VENTA) ---

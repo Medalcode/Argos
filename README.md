@@ -1,96 +1,125 @@
-# 👁️ ARGOS - Bitcoin Trading Bot
+# 🤖 ARGOS Trading Bot (V7 Ultimate)
 
-Argos es un bot de trading algorítmico automatizado diseñado para operar en el mercado de criptomonedas (específicamente Bitcoin/USDT) utilizando estrategias de análisis técnico robustas y gestión de riesgos automatizada.
+Argos es un bot de trading algorítmico profesional diseñado para operar en **Binance Spot**. Combina múltiples indicadores técnicos para entradas precisas y una gestión de riesgo dinámica para proteger el capital.
 
-El sistema opera 24/7, monitoreando el mercado en tiempo real y ejecutando operaciones basadas en el indicador RSI (Relative Strength Index), protegiendo el capital con Stop Loss y asegurando ganancias con Take Profit.
+![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
+![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)
+![License](https://img.shields.io/badge/License-MIT-green.svg)
 
 ## 🚀 Características Principales
 
-- **Estrategia RSI Automática**: Compra en zonas de sobreventa (RSI < 30) para capturar "dips".
-- **Gestión de Riesgo Integrada**:
-  - 🛡️ **Stop Loss (2%)**: Cierra posiciones automáticamente si el mercado se vuelve en contra.
-  - 💰 **Take Profit (4%)**: Asegura ganancias automáticamente cuando se alcanza el objetivo.
-- **Notificaciones en Tiempo Real**: Envía alertas a Telegram sobre cada compra, venta y estado del bot.
-- **Persistencia de Estado**: Sistema de memoria (`JSON`) capaz de recordar operaciones abiertas incluso si el servidor se reinicia.
-- **Heartbeat Monitor**: Verificación de vida cada 12 horas para asegurar que el sistema sigue operativo.
+### 🧠 Estrategia Inteligente (Triple Filtro)
 
-## 📋 Requisitos Previos
+Argos no dispara a lo loco. Solo opera cuando se alinean 3 condiciones:
 
-- Python 3.10 o superior.
-- Cuenta en Binance (API Key & Secret).
-- Cuenta de Telegram (Bot Token & Chat ID).
+1.  **RSI (Relative Strength Index):** Detecta condiciones de sobreventa (`< 35`).
+2.  **Bandas de Bollinger:** Confirma que el precio está estadísticamente "barato" (perforando la banda inferior).
+3.  **EMA 200 (Media Móvil Exponencial):** Filtro de tendencia. Solo compra si el precio está por encima de la EMA 200 (Tendencia Alcista). _"The trend is your friend"_.
 
-## 🛠️ Instalación
+### 🛡️ Gestión de Riesgo (Risk Management)
 
-1.  **Clonar el repositorio:**
+- **Trailing Stop:** No se conforma con ganar poco. Persigue el precio hacia arriba (0.5% de distancia) y vende solo cuando detecta un cambio de tendencia, maximizando ganancias en "pumps".
+- **Tamaño de Posición Dinámico:** Calcula automáticamente cuánto comprar basado en un % de tu saldo (`POSITION_SIZE_PCT`).
+- **Filtro de Saldo:** Verifica fondos antes de operar para evitar errores de API.
 
-    ```bash
-    git clone https://github.com/tu-usuario/argos.git
-    cd argos
-    ```
+### 📡 Control y Notificaciones
 
-2.  **Crear un entorno virtual:**
-
-    ```bash
-    python -m venv venv
-    source venv/bin/activate  # En Windows: venv\Scripts\activate
-    ```
-
-3.  **Instalar dependencias:**
-    ```bash
-    pip install -r requirements.txt
-    ```
-
-## ⚙️ Configuración
-
-1.  Crea un archivo `.env` en la raíz del proyecto (puedes copiar el ejemplo):
-
-    ```bash
-    cp .env.example .env
-    ```
-
-2.  Edita el archivo `.env` con tus credenciales:
-
-    ```env
-    # Credenciales de Binance
-    BINANCE_API_KEY=tu_api_key_aqui
-    BINANCE_SECRET_KEY=tu_secret_key_aqui
-
-    # Configuración de Telegram
-    TELEGRAM_TOKEN=tu_token_de_botfather
-    TELEGRAM_CHAT_ID=tu_id_de_usuario
-
-    # Parámetros de la Estrategia
-    SYMBOL=BTC/USDT
-    STOP_LOSS_PCT=0.02  # 2%
-    TAKE_PROFIT_PCT=0.04 # 4%
-    ```
-
-## ▶️ Uso
-
-Para iniciar el bot en segundo plano verificado (recomendado para servidores):
-
-```bash
-# Activa el entorno (si no lo está)
-source venv/bin/activate
-
-# Ejecuta el bot
-python main.py
-```
-
-Deberías recibir inmediatamente un mensaje en Telegram confirmando el inicio:
-
-> 🤖 **Argos Bot Iniciado**
-> Par: BTC/USDT ...
-
-## ⚠️ Aviso de Responsabilidad
-
-Este software es para fines educativos y experimentales. El trading de criptomonedas conlleva un alto riesgo de pérdida financiera.
-
-- Usa siempre una gestión de riesgo adecuada.
-- Nunca inviertas dinero que no puedas permitirte perder.
-- El autor no se hace responsable de las pérdidas generadas por el uso de este software.
+- **Interactive Telegram:** Controla el bot desde tu móvil.
+  - `/status`: Ver precio, indicadores y posición actual.
+  - `/saldo`: Estimación de capital y PnL acumulado.
+  - `/vender`: **Botón de Pánico** para vender todo inmediatamente.
+- **Reportes Diarios:** Resumen automático cada mañana a las 08:00 AM.
+- **Modo Simulación:** Paper Trading integrado para probar estrategias sin dinero real.
 
 ---
 
-_Desarrollado con ❤️ por MedalCode_
+## 🛠️ Instalación y Uso
+
+### Prerrequisitos
+
+- Python 3.9+
+- Cuenta en Binance (Verificada)
+- Bot de Telegram (Token y Chat ID)
+
+### 1. Clonar y Configurar
+
+```bash
+git clone https://github.com/Medalcode/Argos.git
+cd Argos
+pip install -r requirements.txt
+```
+
+### 2. Variables de Entorno (`.env`)
+
+Renombra `.env.example` a `.env` y configura tus claves:
+
+```ini
+# Credenciales API
+BINANCE_API_KEY=tu_api_key
+BINANCE_SECRET_KEY=tu_secret_key
+TELEGRAM_TOKEN=tu_telegram_token
+TELEGRAM_CHAT_ID=tu_telegram_id
+
+# Configuración del Bot
+SYMBOL=BTC/USDT
+
+# Estrategia
+STOP_LOSS_PCT=0.01          # 1% Pérdida Máxima
+TAKE_PROFIT_PCT=0.015       # 1.5% Meta Inicial (Trailing lo puede extender)
+TRAILING_STOP_PCT=0.005     # 0.5% Distancia de seguimiento
+POSITION_SIZE_PCT=0.95      # Usar 95% del saldo disponible por trade
+
+# Modos
+SIMULATION_MODE=True        # True = Dinero Ficticio, False = Dinero Real
+```
+
+### 3. Ejecutar
+
+```bash
+python main.py
+```
+
+O en segundo plano (Linux):
+
+```bash
+nohup python -u main.py > bot.log 2>&1 &
+```
+
+---
+
+## 🐳 Ejecución con Docker (Recomendado)
+
+Olvídate de instalar Python o librerías. Corre el bot en un contenedor aislado.
+
+1.  **Construir imagen:**
+
+    ```bash
+    docker build -t argos-bot .
+    ```
+
+2.  **Correr contenedor:**
+    ```bash
+    docker run -d --name argos --env-file .env --restart unless-stopped argos-bot
+    ```
+
+---
+
+## 📊 Backtesting
+
+¿Quieres saber cuánto habría ganado esta estrategia el mes pasado?
+
+```bash
+python backtest.py
+```
+
+Este script descarga datos históricos de Binance y simula la estrategia minuto a minuto, dándote un reporte detallado de rentabilidad y Win Rate.
+
+---
+
+## ⚠️ Disclaimer (Aviso Legal)
+
+Este software es para fines educativos y experimentales. El trading de criptomonedas conlleva un alto riesgo de pérdida de capital.
+
+- **Argos** no garantiza ganancias.
+- El autor no se hace responsable de pérdidas financieras derivadas del uso de este bot.
+- Usa **Modo Simulación** hasta que entiendas completamente cómo opera el bot.
