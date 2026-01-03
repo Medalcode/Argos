@@ -1,5 +1,6 @@
 import os
 import time
+import requests
 import datetime
 import ccxt
 import pandas as pd
@@ -61,11 +62,28 @@ def verificar_reporte_diario():
         
         ultimo_reporte_dia = ahora.day
 
+# Archivo para guardar historial
+TRADES_FILE = "trades.csv"
+
+def guardar_trade_csv(fecha, tipo, precio, resultado_pct):
+    existe = os.path.isfile(TRADES_FILE)
+    with open(TRADES_FILE, 'a') as f:
+        # Header si es nuevo
+        if not existe:
+            f.write("fecha,tipo,precio,resultado_pct,ganancia_usd_estimada\n")
+        
+        # Asumiendo capital 1000 usd
+        ganancia_usd = 1000 * resultado_pct
+        f.write(f"{fecha},{tipo},{precio},{resultado_pct:.4f},{ganancia_usd:.2f}\n")
+
 def registrar_operacion(tipo, precio_venta, pnl_pct):
-    # Actualizar Stats
+    # Actualizar Stats en Memoria
     estado["operaciones_hoy"] = estado.get("operaciones_hoy", 0) + 1
     estado["pnl_acumulado"] = estado.get("pnl_acumulado", 0.0) + (pnl_pct * 100)
     
+    # Guardar en CSV
+    guardar_trade_csv(datetime.datetime.now(), tipo, precio_venta, pnl_pct)
+
     # Cerrar Posición
     estado["posicion_abierta"] = False
     estado["max_precio"] = 0.0
@@ -81,28 +99,93 @@ def obtener_datos():
     Obtiene las velas y calcula indicadores.
     """
     try:
-        # Fetch OHLCV (Open, High, Low, Close, Volume)
-        velas = exchange.fetch_ohlcv(SYMBOL, timeframe='15m', limit=100)
+        # Fetch OHLCV (Necesitamos más historia para la EMA 200)
+        # 15m * 300 velas = 75 horas (Suficiente para EMA 200)
+        velas = exchange.fetch_ohlcv(SYMBOL, timeframe='15m', limit=300)
         df = pd.DataFrame(velas, columns=['ts', 'open', 'high', 'low', 'close', 'vol'])
         
-        # Calcular RSI usando pandas_ta
+        # Calcular RSI 14
         df['RSI'] = ta.rsi(df['close'], length=14)
         
-        # Calcular Bandas de Bollinger (Periodo 20, Desviación 2)
-        # Esto genera columnas: BBL_20_2.0 (Lower), BBM... (Mid), BBU... (Upper)
+        # Calcular Bollinger (20, 2)
         bbands = ta.bbands(df['close'], length=20, std=2)
         df = pd.concat([df, bbands], axis=1)
+        
+        # Calcular EMA 200 (Tendencia de largo plazo)
+        df['EMA_200'] = ta.ema(df['close'], length=200)
         
         return df
     except Exception as e:
         print(f"❌ Error obteniendo datos: {e}")
         return pd.DataFrame()
 
+# Variable para no repetir comandos viejos
+ultimo_update_id = 0
+
+def procesar_comandos(df_actual):
+    global ultimo_update_id
+    token = os.getenv('TELEGRAM_TOKEN')
+    if not token: return
+
+    url = f"https://api.telegram.org/bot{token}/getUpdates"
+    params = {'offset': ultimo_update_id + 1, 'timeout': 1}
+    
+    try:
+        r = requests.get(url, params=params, timeout=5)
+        data = r.json()
+        
+        if not data.get('ok'): return
+        
+        for result in data.get('result', []):
+            update_id = result['update_id']
+            ultimo_update_id = update_id # Actualizamos para no leerlo de nuevo
+            
+            message = result.get('message', {})
+            texto = message.get('text', '').lower().strip()
+            
+            if not texto: continue
+            
+            # --- COMANDO /STATUS ---
+            if texto == '/status':
+                precio = df_actual['close'].iloc[-1] if not df_actual.empty else 0
+                rsi = df_actual['RSI'].iloc[-1] if not df_actual.empty else 0
+                pos = "Abierta ✅" if estado["posicion_abierta"] else "Esperando 💤"
+                tendencia = "ALCISTA 🐂" if not df_actual.empty and precio > df_actual['EMA_200'].iloc[-1] else "BAJISTA 🐻"
+                
+                msg = f"""📊 **STATUS ARGOS**
+Precio: {precio}
+RSI: {rsi:.2f}
+Tendencia: {tendencia}
+Posición: {pos}
+PNL Acum: {estado.get('pnl_acumulado',0):.2f}%"""
+                enviar_telegram(msg)
+
+            # --- COMANDO /SALDO ---
+            elif texto == '/saldo':
+                pnl = estado.get("pnl_acumulado", 0.0)
+                saldo_est = 1000 * (1 + pnl/100)
+                enviar_telegram(f"💵 **Saldo Estimado:** ${saldo_est:.2f}\nPnL Acumulado: {pnl:.2f}%")
+
+            # --- COMANDO /VENDER (PÁNICO) ---
+            elif texto == '/vender':
+                if estado["posicion_abierta"]:
+                    precio = df_actual['close'].iloc[-1]
+                    precio_compra = estado["precio_compra"]
+                    pnl_pct = (precio - precio_compra) / precio_compra
+                    
+                    registrar_operacion("VENTA MANUAL (PÁNICO)", precio, pnl_pct)
+                    enviar_telegram("🚨 **VENTA FORZADA EJECUTADA**")
+                else:
+                    enviar_telegram("⚠️ No hay posición abierta para vender.")
+                    
+    except Exception as e:
+        print(f"Error procesando comandos: {e}")
+
 # 2. Loop Principal
 print(f"--- 🤖 ARGOS BOT INICIADO PARA {SYMBOL} ---")
 modo_msg = "🔹 MODO SIMULACIÓN (PAPER TRADING)" if SIMULATION_MODE else "🔸 MODO REAL (DINERO REAL)"
 print(modo_msg)
-enviar_telegram(f"🤖 **Argos Bot Iniciado**\n{modo_msg}\nPar: {SYMBOL}\nEstrategia: RSI + Bollinger + Trailing ({TS*100}%)")
+enviar_telegram(f"🤖 **Argos Bot Iniciado**\n{modo_msg}\nPar: {SYMBOL}\nEstrategia: RSI + Bollinger + EMA200 + Trailing")
 
 while True:
     try:
@@ -119,39 +202,56 @@ while True:
         if df.empty:
             time.sleep(10)
             continue
+            
+        # Asegurarnos de tener suficientes datos para EMA 200
+        if pd.isna(df['EMA_200'].iloc[-1]):
+            print("⏳ Calculando EMA 200 (recopilando datos)...")
+            time.sleep(10)
+            continue
+            
+        # PROCESAR COMANDOS DE TELEGRAM
+        procesar_comandos(df)
 
         precio_actual = df['close'].iloc[-1]
         rsi_actual = df['RSI'].iloc[-1]
-        
-        # Obtenemos la Banda Inferior (Lower Band)
-        # pandas_ta nombra la col: BBL_length_std
         lower_band = df['BBL_20_2.0'].iloc[-1]
+        ema_200 = df['EMA_200'].iloc[-1]
 
-        # Log de consola (para debug ver que sigue vivo)
-        status_msg = f"[{datetime.datetime.now().strftime('%H:%M:%S')}] P: {precio_actual:.2f} | RSI: {rsi_actual:.2f} | BBL: {lower_band:.2f} | Pos: {estado['posicion_abierta']}"
+        # Log de consola
+        tendencia = "ALCISTA 🐂" if precio_actual > ema_200 else "BAJISTA 🐻"
+        status_msg = f"[{datetime.datetime.now().strftime('%H:%M:%S')}] P: {precio_actual:.2f} | RSI: {rsi_actual:.2f} | Tendencia: {tendencia} | Pos: {estado['posicion_abierta']}"
         print(status_msg)
 
         if not estado["posicion_abierta"]:
             # --- LÓGICA DE ENTRADA (COMPRA) ---
-            # FILTRO DOBLE: RSI < 35 Y Precio < Banda Inferior
-            if rsi_actual < 35 and precio_actual < lower_band:
-                print(f"🚀 SEÑAL CONFIRMADA: RSI {rsi_actual:.2f} y Precio < Bollinger")
+            # FILTRO TRIPLE: 
+            # 1. RSI < 35 (Oversold)
+            # 2. Precio < Banda Bollinger Inferior (Cheap)
+            # 3. Precio > EMA 200 (Trend is Up - Solo compramos correcciones en subida)
+            
+            condicion_rsi = rsi_actual < 35
+            condicion_bb = precio_actual < lower_band
+            condicion_ema = precio_actual > ema_200
+            
+            if condicion_rsi and condicion_bb and condicion_ema:
+                print(f"🚀 SEÑAL PERFECTA CONFIRMADA")
                 
                 if not SIMULATION_MODE:
                     # order = exchange.create_market_buy_order(SYMBOL, cantidad)
-                    pass # Descomentar para producción real
+                    pass 
                 
-                # Simulamos la compra guardando el estado
+                # Guardar estado
                 estado.update({
                     "posicion_abierta": True, 
                     "precio_compra": precio_actual,
-                    "max_precio": precio_actual, # Inicializamos el max_precio
+                    "max_precio": precio_actual, 
                     "fecha_compra": str(datetime.datetime.now())
                 })
                 guardar_estado(estado)
+                guardar_trade_csv(datetime.datetime.now(), "COMPRA", precio_actual, 0)
                 
-                enviar_telegram(f"🚀 **COMPRA EJECUTADA ({'SIMULADA' if SIMULATION_MODE else 'REAL'})**\nPrecio: {precio_actual}\nRSI: {rsi_actual:.2f}\nBanda Bool: {lower_band:.2f}")
-        
+                enviar_telegram(f"🚀 **COMPRA EJECUTADA**\nPrecio: {precio_actual}\nRSI: {rsi_actual:.2f}\nEMA200: {ema_200:.2f} (Tendencia OK)")
+    
         else:
             # --- LÓGICA DE SALIDA (VENTA) ---
             precio_entrada = estado["precio_compra"]
