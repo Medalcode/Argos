@@ -233,7 +233,12 @@ while True:
 
         precio_actual = df['close'].iloc[-1]
         rsi_actual = df['RSI'].iloc[-1]
-        lower_band = df['BBL_20_2.0'].iloc[-1]
+        
+        # Búsqueda inteligente de la columna BBL (Lower Band)
+        # A veces panda_ta la llama BBL_20_2.0, otras veces diferente
+        col_bbl = [c for c in df.columns if c.startswith('BBL')][0]
+        lower_band = df[col_bbl].iloc[-1]
+        
         ema_200 = df['EMA_200'].iloc[-1]
 
         # Log de consola
