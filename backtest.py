@@ -16,8 +16,13 @@ TIMEFRAME = '15m'
 CANDLES_LIMIT = 1000 
 TOTAL_CHUNKS = 4 # 4 * 1000 = 4000 velas
 
-SL = float(os.getenv('STOP_LOSS_PCT', 0.02))
-TP = float(os.getenv('TAKE_PROFIT_PCT', 0.04))
+SL = float(os.getenv('STOP_LOSS_PCT', 0.01))
+TP = float(os.getenv('TAKE_PROFIT_PCT', 0.015))
+TS = float(os.getenv('TRAILING_STOP_PCT', 0.005))  # Trailing Stop
+
+# Parámetros de la estrategia (Triple Filtro)
+RSI_THRESHOLD = 35  # RSI < 35 para comprar
+EMA_LENGTH = 20     # EMA 20 (ajustado para datos limitados)
 
 exchange = ccxt.binance()
 
@@ -52,6 +57,13 @@ def fetch_historical_data():
     # Calcular Indicadores igual que en el bot
     df['RSI'] = ta.rsi(df['close'], length=14)
     
+    # Bandas de Bollinger (20, 2)
+    bbands = ta.bbands(df['close'], length=20, std=2)
+    df = pd.concat([df, bbands], axis=1)
+    
+    # EMA para tendencia
+    df['EMA'] = ta.ema(df['close'], length=EMA_LENGTH)
+    
     return df
 
 def run_backtest(df):
@@ -67,37 +79,60 @@ def run_backtest(df):
     win_count = 0
     loss_count = 0
     
-    for i in range(14, len(df)):
+    for i in range(EMA_LENGTH + 20, len(df)):  # Necesitamos datos suficientes para EMA y BB
         row = df.iloc[i]
         precio = row['close']
         rsi = row['RSI']
         ts = row['datetime']
         
+        # Buscar columna BBL (Lower Band)
+        col_bbl = [c for c in df.columns if c.startswith('BBL')]
+        if not col_bbl:
+            continue
+        lower_band = row[col_bbl[0]]
+        ema = row['EMA']
+        
         if posicion is None:
-            # --- LÓGICA DE COMPRA ---
-            if rsi < 30:
-                # Compramos
-                posicion = {
-                    'precio': precio,
-                    'fecha': ts
-                }
-                # No restamos del saldo todavía, calculamos PnL al cerrar
+            # --- LÓGICA DE COMPRA (TRIPLE FILTRO) ---
+            # 1. RSI < 35 (Sobreventa)
+            # 2. Precio < Banda Bollinger Inferior (Cheap)
+            # 3. Precio > EMA (Tendencia Alcista)
+            if pd.notna(rsi) and pd.notna(lower_band) and pd.notna(ema):
+                if rsi < RSI_THRESHOLD and precio < lower_band and precio > ema:
+                    # Compramos
+                    posicion = {
+                        'precio': precio,
+                        'fecha': ts,
+                        'max_precio': precio  # Para Trailing Stop
+                    }
         
         else:
             # --- LÓGICA DE VENTA ---
             precio_entrada = posicion['precio']
+            max_precio = posicion['max_precio']
             
-            # Stop Loss
-            if precio <= precio_entrada * (1 - SL):
+            # Actualizar máximo precio (Trailing Stop)
+            if precio > max_precio:
+                max_precio = precio
+                posicion['max_precio'] = max_precio
+            
+            # Calcular precio de salida del Trailing Stop
+            precio_trailing = max_precio * (1 - TS)
+            
+            # 1. Trailing Stop (prioridad)
+            if precio <= precio_trailing:
                 pnl = (precio - precio_entrada) / precio_entrada
-                resultado = saldo * pnl # Ganancia/Pérdida en $
+                resultado = saldo * pnl
                 saldo += resultado
                 
-                operaciones.append({'tipo': 'SL', 'pnl_pct': pnl, 'fecha': ts})
-                loss_count += 1
+                operaciones.append({'tipo': 'TRAILING STOP', 'pnl_pct': pnl, 'fecha': ts})
+                if pnl > 0:
+                    win_count += 1
+                else:
+                    loss_count += 1
                 posicion = None
                 
-            # Take Profit
+            # 2. Take Profit
             elif precio >= precio_entrada * (1 + TP):
                 pnl = (precio - precio_entrada) / precio_entrada
                 resultado = saldo * pnl

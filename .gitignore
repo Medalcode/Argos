@@ -1,5 +1,53 @@
+# Archivos de configuración con credenciales
 .env
+.env.*
+.env.local
+.env.testnet
+.env.production
+*.env
+
+# Python
 __pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info
+dist/
+build/
+
+# Estado y logs
 estado_bot.json
 *.log
+*.db
+*.sqlite
+*.sqlite3
+
+# Entorno virtual
 venv/
+env/
+ENV/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Backups
+*.backup
+*.bak
+backup_*

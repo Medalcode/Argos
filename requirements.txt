@@ -1,5 +1,6 @@
-ccxt
-pandas
-pandas_ta
-python-dotenv
-requests
+ccxt>=4.0.0,<5.0.0
+pandas>=2.0.0,<3.0.0
+pandas_ta>=0.3.14b
+python-dotenv>=1.0.0
+requests>=2.31.0
+rich>=13.0.0
