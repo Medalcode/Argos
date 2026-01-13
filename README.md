@@ -48,6 +48,7 @@ Argos no dispara a lo loco. Solo opera cuando se alinean 3 condiciones:
 
 - Python 3.9+
 - Cuenta en Binance (Verificada)
+
 ### 1. Instalación
 
 ```bash
@@ -85,22 +86,46 @@ TRAILING_STOP_PCT=0.005     # 0.5% trailing
 POSITION_SIZE_PCT=0.95      # 95% del saldo
 
 # Modo
-SIMULATION_MODE=False       # True = paper trading
+SIMULATION_MODE=False       # True = paper trading, False = ejecuta órdenes reales
 ```
 
-### 3. Testing en Testnet (Recomendado)
+> [!IMPORTANT] > **Modo Testnet Activo por Defecto**: El bot está configurado para usar **Binance Testnet** (línea 57 en `main.py`). Esto significa que ejecutará órdenes reales en el entorno de prueba con dinero falso, perfecto para validar la estrategia sin riesgo.
 
-Sigue la guía completa en [TESTING_GUIDE.md](TESTING_GUIDE.md):
+### 3. Testing en Testnet (Recomendado) ⚠️
+
+**El bot viene configurado para Testnet por defecto.** Sigue estos pasos:
 
 ```bash
 # 1. Obtener API keys de Binance Testnet
 # https://testnet.binance.vision/
 
 # 2. Configurar .env con testnet keys
+cp .env.example .env
+# Editar .env con tus keys de testnet
 
-# 3. Ejecutar bot
+# 3. Ejecutar bot (usará testnet automáticamente)
 python main.py
 ```
+
+### 3.1. Modo Producción (Dinero Real) 💰
+
+> [!CAUTION] > **Solo para usuarios experimentados.** Asegúrate de haber probado exhaustivamente en testnet primero.
+
+Para usar dinero real:
+
+1. **Comentar línea 57 en `main.py`**:
+
+   ```python
+   # exchange.set_sandbox_mode(True)  # ← Comentar esta línea
+   ```
+
+2. **Usar API keys de Binance REAL** (no testnet) en `.env`
+
+3. **Verificar saldo en Binance Spot** (mínimo $15 USDT recomendado)
+
+4. **Ejecutar**: `python main.py`
+
+Ver [DEPLOYMENT_VPS.md](DEPLOYMENT_VPS.md) para despliegue en servidor.
 
 ### 4. Ejecutar Tests
 
