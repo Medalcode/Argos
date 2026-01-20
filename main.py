@@ -1,4 +1,16 @@
 import os
+import sys
+
+# Mock numba if it's missing (common in Termux)
+try:
+    import numba
+except ImportError:
+    from unittest.mock import MagicMock
+    mock_numba = MagicMock()
+    mock_numba.njit = lambda f=None, *args, **kwargs: f if f else lambda x: x
+    mock_numba.jit = lambda f=None, *args, **kwargs: f if f else lambda x: x
+    sys.modules["numba"] = mock_numba
+
 import time
 import requests
 import datetime

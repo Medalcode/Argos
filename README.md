@@ -12,6 +12,7 @@ Bot de trading algorítmico profesional para **Binance Spot** con estrategia Tri
 - 📊 **Web Dashboard**: Panel en tiempo real en `http://localhost:8000`.
 - 🐳 **Docker**: Despliegue en un solo comando con `docker-compose`.
 - 🧠 **Optimizador AI**: Grid Search con multiprocessing para encontrar los mejores parámetros.
+- 📱 **Android Support**: Optimización especial para correr en Termux (celulares viejos/reciclados).
 - 📚 **Docs Consolidados**: Toda la documentación ordenada en `docs/`.
 
 ---
