@@ -1,230 +1,74 @@
-# 🤖 ARGOS Trading Bot v2.3.0
+# 🤖 ARGOS Trading Bot v2.4.0
 
-Bot de trading algorítmico profesional para **Binance Spot** con estrategia Triple Filtro, Trailing Stop dinámico, y métricas avanzadas de performance.
+Bot de trading algorítmico profesional para **Binance Spot** con estrategia Triple Filtro, Trailing Stop dinámico y Dashboard Web.
 
 ![Python](https://img.shields.io/badge/Python-3.13-blue.svg)
-![Tests](https://img.shields.io/badge/Tests-28%20passed-success.svg)
-![Coverage](https://img.shields.io/badge/Coverage-100%25-brightgreen.svg)
-![SQLite](https://img.shields.io/badge/Database-SQLite-003B57.svg)
+![Tests](https://img.shields.io/badge/Tests-100%25-success.svg)
+![Docker](https://img.shields.io/badge/Docker-Ready-blue)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
 
-## ⭐ Novedades v2.3.0
+## ⭐ Novedades v2.4
 
-- ✅ **28 Tests Unitarios** con pytest (100% éxito)
-- ✅ **Base de Datos SQLite** (5 tablas, reemplaza CSV)
-- ✅ **8 Métricas Avanzadas** (Sharpe, Max DD, Profit Factor, etc.)
-- ✅ **Documentación Completa** (TESTING.md, DATABASE.md, METRICAS.md)
-
-## 🚀 Características Principales
-
-### 🧠 Estrategia Inteligente (Triple Filtro)
-
-Argos no dispara a lo loco. Solo opera cuando se alinean 3 condiciones:
-
-1.  **RSI (Relative Strength Index):** Detecta condiciones de sobreventa (`< 35`).
-2.  **Bandas de Bollinger:** Confirma que el precio está estadísticamente "barato" (perforando la banda inferior).
-3.  **EMA 200 (Media Móvil Exponencial):** Filtro de tendencia. Solo compra si el precio está por encima de la EMA 200 (Tendencia Alcista). _"The trend is your friend"_.
-
-### 🛡️ Gestión de Riesgo (Risk Management)
-
-- **Trailing Stop:** No se conforma con ganar poco. Persigue el precio hacia arriba (0.5% de distancia) y vende solo cuando detecta un cambio de tendencia, maximizando ganancias en "pumps".
-- **Tamaño de Posición Dinámico:** Calcula automáticamente cuánto comprar basado en un % de tu saldo (`POSITION_SIZE_PCT`).
-- **Filtro de Saldo:** Verifica fondos antes de operar para evitar errores de API.
-
-### 📡 Control y Notificaciones
-
-- **Interactive Telegram:** Controla el bot desde tu móvil.
-  - `/status`: Ver precio, indicadores y posición actual.
-  - `/saldo`: Estimación de capital y PnL acumulado.
-  - `/vender`: **Botón de Pánico** para vender todo inmediatamente.
-- **Reportes Diarios:** Resumen automático cada mañana a las 08:00 AM.
-- **Modo Simulación:** Paper Trading integrado para probar estrategias sin dinero real.
+- 📊 **Web Dashboard**: Panel en tiempo real en `http://localhost:8000`.
+- 🐳 **Docker**: Despliegue en un solo comando con `docker-compose`.
+- 🧠 **Optimizador AI**: Grid Search con multiprocessing para encontrar los mejores parámetros.
+- 📚 **Docs Consolidados**: Toda la documentación ordenada en `docs/`.
 
 ---
 
-## 🛠️ Instalación y Uso
+## 🚀 Inicio Rápido (Docker)
 
-### Prerrequisitos
-
-- Python 3.9+
-- Cuenta en Binance (Verificada)
-
-### 1. Instalación
+La forma recomendada de ejecutar Argos.
 
 ```bash
-# Clonar repositorio
-git clone https://github.com/Medalcode/Argos.git
-cd Argos
-
-# Crear entorno virtual
-python3 -m venv venv
-source venv/bin/activate  # Linux/Mac
-# venv\Scripts\activate   # Windows
-
-# Instalar dependencias
-pip install -r requirements.txt
-```
-
-### 2. Configuración (`.env`)
-
-Copia `.env.example` a `.env` y configura:
-
-```ini
-# Binance API (TESTNET recomendado para empezar)
-BINANCE_API_KEY=tu_api_key
-BINANCE_SECRET_KEY=tu_secret_key
-
-# Telegram
-TELEGRAM_TOKEN=tu_telegram_token
-TELEGRAM_CHAT_ID=tu_telegram_id
-
-# Trading
-SYMBOL=BTC/USDT
-STOP_LOSS_PCT=0.01          # 1% pérdida máxima
-TAKE_PROFIT_PCT=0.015       # 1.5% meta inicial
-TRAILING_STOP_PCT=0.005     # 0.5% trailing
-POSITION_SIZE_PCT=0.95      # 95% del saldo
-
-# Modo
-SIMULATION_MODE=False       # True = paper trading, False = ejecuta órdenes reales
-```
-
-> [!IMPORTANT] > **Modo Testnet Activo por Defecto**: El bot está configurado para usar **Binance Testnet** (línea 57 en `main.py`). Esto significa que ejecutará órdenes reales en el entorno de prueba con dinero falso, perfecto para validar la estrategia sin riesgo.
-
-### 3. Testing en Testnet (Recomendado) ⚠️
-
-**El bot viene configurado para Testnet por defecto.** Sigue estos pasos:
-
-```bash
-# 1. Obtener API keys de Binance Testnet
-# https://testnet.binance.vision/
-
-# 2. Configurar .env con testnet keys
+# 1. Configurar credenciales
 cp .env.example .env
-# Editar .env con tus keys de testnet
+nano .env
 
-# 3. Ejecutar bot (usará testnet automáticamente)
-python main.py
-```
+# 2. Iniciar Bot + Dashboard
+docker-compose up -d
 
-### 3.1. Modo Producción (Dinero Real) 💰
-
-> [!CAUTION] > **Solo para usuarios experimentados.** Asegúrate de haber probado exhaustivamente en testnet primero.
-
-Para usar dinero real:
-
-1. **Comentar línea 57 en `main.py`**:
-
-   ```python
-   # exchange.set_sandbox_mode(True)  # ← Comentar esta línea
-   ```
-
-2. **Usar API keys de Binance REAL** (no testnet) en `.env`
-
-3. **Verificar saldo en Binance Spot** (mínimo $15 USDT recomendado)
-
-4. **Ejecutar**: `python main.py`
-
-Ver [DEPLOYMENT_VPS.md](DEPLOYMENT_VPS.md) para despliegue en servidor.
-
-### 4. Ejecutar Tests
-
-```bash
-# Tests unitarios
-pytest tests/ -v
-
-# Con cobertura
-pytest tests/ --cov=. --cov-report=html
-```
-
-### 5. Backtest Histórico
-
-```bash
-python backtest.py
-```
-
-### 6. Métricas de Performance
-
-```bash
-python metricas.py
+# 3. Ver Dashboard
+# Abre http://localhost:8000 en tu navegador
 ```
 
 ---
 
-## 🧪 Testing
+## 📚 Documentación
 
-El bot incluye una suite completa de tests:
+Toda la información detallada se encuentra en la carpeta `docs/`.
+
+| Documento                              | Descripción                                                |
+| -------------------------------------- | ---------------------------------------------------------- |
+| [📖 DEPLOYMENT.md](docs/DEPLOYMENT.md) | Guía de instalación en VPS y gestión de credenciales.      |
+| [🧪 TESTING.md](docs/TESTING.md)       | Guía de tests unitarios y validación en Testnet.           |
+| [🗄️ DATABASE.md](docs/DATABASE.md)     | Esquema de la base de datos SQLite.                        |
+| [📈 METRICS.md](docs/METRICS.md)       | Explicación de métricas de performance (Sharpe, Drawdown). |
+| [🛡️ SECURITY.md](docs/SECURITY.md)     | Política de seguridad y manejo de secretos.                |
+| [📝 CHANGELOG.md](docs/CHANGELOG.md)   | Historial de cambios y versiones.                          |
+
+---
+
+## 🛠️ Herramientas Extra
+
+### Optimización de Estrategia
+
+Encuentra los parámetros matemáticamente perfectos para el mercado actual:
 
 ```bash
-# Ejecutar todos los tests
-pytest tests/ -v
-
-# Tests específicos
-pytest tests/test_trading_logic.py -v
-pytest tests/test_indicators.py -v
-
-# Con cobertura HTML
-pytest tests/ --cov=. --cov-report=html
-open htmlcov/index.html  # Ver reporte
+python3 optimize.py
 ```
 
-**Resultado**: 28 tests, 100% éxito, cobertura 100% en módulos críticos.
+### Tests
 
-Ver [TESTING.md](TESTING.md) para más detalles.
+Ejecuta la suite de pruebas para asegurar la estabilidad:
+
+```bash
+pytest tests/
+```
 
 ---
 
-## 🗄️ Base de Datos
+## ⚠️ Disclaimer
 
-Sistema SQLite con 5 tablas:
-
-- `trades`: Operaciones completadas
-- `senales`: Histórico de señales
-- `precios`: Histórico de precios
-- `metricas_diarias`: Agregación por día
-- `estado`: Estado actual del bot
-
-```python
-from database import Database
-
-with Database() as db:
-    # Obtener estadísticas
-    stats = db.obtener_estadisticas_globales()
-    print(f"Win Rate: {stats['win_rate']}%")
-```
-
-Ver [DATABASE.md](DATABASE.md) para API completa.
-
----
-
-## 📊 Métricas de Performance
-
-8 métricas profesionales:
-
-- **Sharpe Ratio**: Retorno ajustado por riesgo
-- **Maximum Drawdown**: Mayor caída desde pico
-- **Profit Factor**: Ganancias / Pérdidas
-- **Expectancy**: Valor esperado por trade
-- **Recovery Factor**: Capacidad de recuperación
-- **Win Rate por periodo**: Diario/Semanal/Mensual
-- **MAE/MFE**: Adverse/Favorable Excursion
-
-```python
-from metricas import MetricasPerformance, imprimir_reporte_consola
-
-metricas = MetricasPerformance()
-reporte = metricas.generar_reporte_completo(30)
-imprimir_reporte_consola(reporte)
-```
-
-Ver [METRICAS.md](METRICAS.md) para interpretaciones y benchmarks.
-
----
-
-## ⚠️ Disclaimer (Aviso Legal)
-
-Este software es para fines educativos y experimentales. El trading de criptomonedas conlleva un alto riesgo de pérdida de capital.
-
-- **Argos** no garantiza ganancias.
-- El autor no se hace responsable de pérdidas financieras derivadas del uso de este bot.
-- Usa **Modo Simulación** hasta que entiendas completamente cómo opera el bot.
+Este software es para fines educativos. El trading de criptomonedas conlleva alto riesgo. Usa el **Modo Testnet** (ver `docs/TESTING.md`) antes de arriesgar capital real.

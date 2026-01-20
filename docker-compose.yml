@@ -1,0 +1,30 @@
+services:
+  argos:
+    build: .
+    container_name: argos-bot
+    restart: unless-stopped
+    volumes:
+      - ./.env:/app/.env:ro
+      - ./logs:/app/logs
+      - ./data:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  dashboard:
+    build: .
+    container_name: argos-dashboard
+    command: uvicorn dashboard.main:app --host 0.0.0.0 --port 8000
+    restart: unless-stopped
+    volumes:
+      - ./.env:/app/.env:ro
+      - ./data:/app/data:ro  # Read-only access to DB
+      - ./dashboard:/app/dashboard
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1

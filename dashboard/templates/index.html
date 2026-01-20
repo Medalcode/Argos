@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Argos Dashboard</title>
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      body {
+        background-color: #0f172a;
+        color: #e2e8f0;
+      }
+      .chart-container {
+        height: 600px;
+        width: 100%;
+      }
+    </style>
+  </head>
+  <body class="flex flex-col h-screen">
+    <!-- Header -->
+    <header
+      class="bg-slate-900 border-b border-slate-700 p-4 flex justify-between items-center"
+    >
+      <h1 class="text-xl font-bold flex items-center gap-2">
+        🤖 Argos Trading Bot
+        <span class="text-xs bg-blue-600 px-2 py-0.5 rounded text-white"
+          >v2.3</span
+        >
+      </h1>
+      <div
+        id="status-badge"
+        class="px-3 py-1 rounded-full text-sm font-semibold bg-gray-700"
+      >
+        Desconectado
+      </div>
+    </header>
+
+    <div class="flex flex-1 overflow-hidden">
+      <!-- Sidebar Stats -->
+      <aside
+        class="w-64 bg-slate-800 border-r border-slate-700 p-4 flex flex-col gap-6 overflow-y-auto"
+      >
+        <div class="stat-card">
+          <h3 class="text-slate-400 text-sm uppercase tracking-wider">
+            PnL Acumulado
+          </h3>
+          <p id="pnl-display" class="text-2xl font-mono font-bold text-white">
+            --
+          </p>
+        </div>
+
+        <div class="stat-card">
+          <h3 class="text-slate-400 text-sm uppercase tracking-wider">
+            Posición Actual
+          </h3>
+          <div id="position-card" class="bg-slate-700 p-3 rounded mt-1">
+            <p class="text-sm">Ninguna</p>
+          </div>
+        </div>
+
+        <div class="mt-auto">
+          <h3 class="text-slate-400 text-sm uppercase tracking-wider mb-2">
+            Últimos Trades
+          </h3>
+          <ul id="trades-list" class="text-xs space-y-2">
+            <li class="text-slate-500 italic">Cargando...</li>
+          </ul>
+        </div>
+      </aside>
+
+      <!-- Main Chart -->
+      <main class="flex-1 p-4 relative">
+        <div
+          id="chart"
+          class="chart-container rounded-lg overflow-hidden border border-slate-700 bg-slate-900"
+        ></div>
+      </main>
+    </div>
+
+    <script>
+      // Inicializar Gráfico
+      const chartContainer = document.getElementById("chart");
+      const chart = LightweightCharts.createChart(chartContainer, {
+        layout: {
+          background: { type: "solid", color: "#0f172a" },
+          textColor: "#cbd5e1",
+        },
+        grid: {
+          vertLines: { color: "#1e293b" },
+          horzLines: { color: "#1e293b" },
+        },
+        rightPriceScale: { borderColor: "#334155" },
+        timeScale: {
+          borderColor: "#334155",
+          timeVisible: true,
+          secondsVisible: false,
+        },
+      });
+
+      // Serie de Línea (Precio)
+      const lineSeries = chart.addLineSeries({
+        color: "#22d3ee",
+        lineWidth: 2,
+      });
+
+      async function updateData() {
+        try {
+          // 1. Obtener Historial
+          const historyRes = await fetch("/api/history");
+          const history = await historyRes.json();
+
+          if (history.data && history.data.length > 0) {
+            // Convertir time a formato lightweight charts si necesario (ya viene en timestamp s)
+            const uniqueData = Array.from(
+              new Map(history.data.map((item) => [item.time, item])).values(),
+            );
+            lineSeries.setData(uniqueData);
+          }
+
+          // 2. Obtener Stats
+          const statsRes = await fetch("/api/stats");
+          const stats = await statsRes.json();
+
+          // Actualizar UI Stats
+          const pnlEl = document.getElementById("pnl-display");
+          pnlEl.innerText = `$${(stats.pnl_acumulado || 0).toFixed(2)}`;
+          pnlEl.className = `text-2xl font-mono font-bold ${stats.pnl_acumulado >= 0 ? "text-green-400" : "text-red-400"}`;
+
+          const posEl = document.getElementById("position-card");
+          if (stats.posicion_abierta) {
+            posEl.innerHTML = `
+                        <div class="flex justify-between"><span class="text-green-300">COMPRA</span> <span>$${stats.precio_compra}</span></div>
+                    `;
+            document.getElementById("status-badge").innerText = "OPERANDO";
+            document.getElementById("status-badge").className =
+              "px-3 py-1 rounded-full text-sm font-semibold bg-green-600 text-white animate-pulse";
+          } else {
+            posEl.innerHTML = `<p class="text-slate-400 text-sm">Esperando señal...</p>`;
+            document.getElementById("status-badge").innerText = "MONITOREANDO";
+            document.getElementById("status-badge").className =
+              "px-3 py-1 rounded-full text-sm font-semibold bg-blue-600 text-white";
+          }
+
+          // 3. Obtener Trades
+          const tradesRes = await fetch("/api/trades");
+          const trades = await tradesRes.json();
+          const listEl = document.getElementById("trades-list");
+          listEl.innerHTML = "";
+
+          trades.slice(0, 5).forEach((t) => {
+            const li = document.createElement("li");
+            const color = t.pnl_usd >= 0 ? "text-green-400" : "text-red-400";
+            li.innerHTML = `
+                        <div class="flex justify-between border-b border-slate-700 pb-1">
+                            <span>${new Date(t.timestamp_venta).toLocaleTimeString()}</span>
+                            <span class="${color} font-bold">$${t.pnl_usd.toFixed(2)}</span>
+                        </div>
+                    `;
+            listEl.appendChild(li);
+          });
+        } catch (err) {
+          console.error("Error fetching data:", err);
+          document.getElementById("status-badge").innerText = "ERROR CONEXIÓN";
+          document.getElementById("status-badge").className =
+            "px-3 py-1 rounded-full text-sm font-semibold bg-red-600 text-white";
+        }
+      }
+
+      // Auto-update cada 5 segundos
+      updateData();
+      setInterval(updateData, 5000);
+
+      // Resize observer
+      new ResizeObserver((entries) => {
+        if (entries.length === 0 || entries[0].target !== chartContainer) {
+          return;
+        }
+        const newRect = entries[0].contentRect;
+        chart.applyOptions({ height: newRect.height, width: newRect.width });
+      }).observe(chartContainer);
+    </script>
+  </body>
+</html>

@@ -1,6 +1,12 @@
 __pycache__
-venv
-.git
+venv/
+.git/
 .env
 *.log
 estado_bot.json
+argos.db
+data/
+.pytest_cache/
+htmlcov/
+.coverage
+optimization_results*.csv
