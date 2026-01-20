@@ -38,14 +38,15 @@ docker-compose up -d
 
 Toda la información detallada se encuentra en la carpeta `docs/`.
 
-| Documento                              | Descripción                                                |
-| -------------------------------------- | ---------------------------------------------------------- |
-| [📖 DEPLOYMENT.md](docs/DEPLOYMENT.md) | Guía de instalación en VPS y gestión de credenciales.      |
-| [🧪 TESTING.md](docs/TESTING.md)       | Guía de tests unitarios y validación en Testnet.           |
-| [🗄️ DATABASE.md](docs/DATABASE.md)     | Esquema de la base de datos SQLite.                        |
-| [📈 METRICS.md](docs/METRICS.md)       | Explicación de métricas de performance (Sharpe, Drawdown). |
-| [🛡️ SECURITY.md](docs/SECURITY.md)     | Política de seguridad y manejo de secretos.                |
-| [📝 CHANGELOG.md](docs/CHANGELOG.md)   | Historial de cambios y versiones.                          |
+| Documento                               | Descripción                                                |
+| --------------------------------------- | ---------------------------------------------------------- |
+| [📖 DEPLOYMENT.md](docs/DEPLOYMENT.md)  | Guía de instalación en VPS y gestión de credenciales.      |
+| [📱 ANDROID.md](docs/ANDROID_TERMUX.md) | **¡Nuevo!** Guía para instalar en un celular viejo.        |
+| [🧪 TESTING.md](docs/TESTING.md)        | Guía de tests unitarios y validación en Testnet.           |
+| [🗄️ DATABASE.md](docs/DATABASE.md)      | Esquema de la base de datos SQLite.                        |
+| [📈 METRICS.md](docs/METRICS.md)        | Explicación de métricas de performance (Sharpe, Drawdown). |
+| [🛡️ SECURITY.md](docs/SECURITY.md)      | Política de seguridad y manejo de secretos.                |
+| [📝 CHANGELOG.md](docs/CHANGELOG.md)    | Historial de cambios y versiones.                          |
 
 ---
 
