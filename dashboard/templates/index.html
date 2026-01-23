@@ -59,6 +59,38 @@
           </div>
         </div>
 
+        <!-- Panel de Control -->
+        <div class="stat-card">
+          <h3 class="text-slate-400 text-sm uppercase tracking-wider mb-2">Control</h3>
+          <button onclick="reiniciar('main.py')" class="w-full bg-blue-700 hover:bg-blue-800 text-white py-1 px-2 rounded mb-2">Reiniciar main.py</button>
+          <button onclick="reiniciar('memoria.py')" class="w-full bg-blue-700 hover:bg-blue-800 text-white py-1 px-2 rounded">Reiniciar memoria.py</button>
+        </div>
+
+        <!-- Eventos recientes -->
+        <div class="stat-card">
+          <h3 class="text-slate-400 text-sm uppercase tracking-wider mb-2">Eventos recientes</h3>
+          <div class="flex gap-2 mb-2">
+            <select id="filtro-tipo" class="bg-slate-700 text-white rounded px-2 py-1">
+              <option value="">Todos</option>
+              <option value="reinicio">Reinicio</option>
+              <option value="reinicio_dashboard">Reinicio Dashboard</option>
+              <option value="error">Error</option>
+            </select>
+            <input type="date" id="filtro-desde" class="bg-slate-700 text-white rounded px-2 py-1" />
+            <input type="date" id="filtro-hasta" class="bg-slate-700 text-white rounded px-2 py-1" />
+            <button onclick="aplicarFiltroEventos()" class="bg-blue-700 hover:bg-blue-800 text-white px-2 py-1 rounded">Filtrar</button>
+          </div>
+          <div class="flex gap-2 mb-2">
+            <button onclick="paginaEventos(-1)" class="bg-slate-700 text-white px-2 py-1 rounded">Anterior</button>
+            <span id="pagina-eventos" class="text-slate-400">1</span>
+            <button onclick="paginaEventos(1)" class="bg-slate-700 text-white px-2 py-1 rounded">Siguiente</button>
+          </div>
+          <button onclick="exportarEventos()" class="w-full bg-green-700 hover:bg-green-800 text-white py-1 px-2 rounded mb-2">Exportar CSV</button>
+          <ul id="eventos-list" class="text-xs space-y-1 max-h-40 overflow-y-auto">
+            <li class="text-slate-500 italic">Cargando...</li>
+          </ul>
+        </div>
+
         <div class="mt-auto">
           <h3 class="text-slate-400 text-sm uppercase tracking-wider mb-2">
             Últimos Trades
@@ -66,6 +98,17 @@
           <ul id="trades-list" class="text-xs space-y-2">
             <li class="text-slate-500 italic">Cargando...</li>
           </ul>
+        </div>
+
+        <!-- Editor de procesos -->
+        <div class="stat-card">
+          <h3 class="text-slate-400 text-sm uppercase tracking-wider mb-2">Procesos monitoreados</h3>
+          <ul id="procesos-list" class="text-xs space-y-1 mb-2"></ul>
+          <div class="flex gap-2 mb-2">
+            <input id="nuevo-nombre" type="text" placeholder="Nombre (ej: main.py)" class="bg-slate-700 text-white rounded px-2 py-1" />
+            <input id="nuevo-comando" type="text" placeholder="Comando (ej: python3 main.py)" class="bg-slate-700 text-white rounded px-2 py-1" />
+            <button onclick="agregarProceso()" class="bg-green-700 hover:bg-green-800 text-white px-2 py-1 rounded">Agregar</button>
+          </div>
         </div>
       </aside>
 
@@ -171,6 +214,103 @@
       updateData();
       setInterval(updateData, 5000);
 
+      // --- Control de procesos ---
+      async function reiniciar(proc) {
+        if (!confirm(`¿Seguro que deseas reiniciar ${proc}?`)) return;
+        try {
+          const res = await fetch(`/api/restart/${proc}`, { method: 'POST' });
+          const data = await res.json();
+          alert(data.message || 'Acción enviada');
+        } catch (e) {
+          alert('Error al solicitar reinicio');
+        }
+      }
+
+      // --- Exportar eventos ---
+      function exportarEventos() {
+        window.open('/api/eventos/export', '_blank');
+      }
+
+      // --- Filtrar eventos ---
+      let paginaActual = 1;
+      const pageSize = 20;
+      async function aplicarFiltroEventos(page = 1) {
+        paginaActual = page;
+        document.getElementById('pagina-eventos').innerText = paginaActual;
+        const tipo = document.getElementById('filtro-tipo').value;
+        const desde = document.getElementById('filtro-desde').value;
+        const hasta = document.getElementById('filtro-hasta').value;
+        let url = `/api/eventos/filter?page=${paginaActual}&page_size=${pageSize}`;
+        if (tipo) url += `&tipo=${tipo}`;
+        if (desde) url += `&desde=${desde}`;
+        if (hasta) url += `&hasta=${hasta}`;
+        try {
+          const res = await fetch(url);
+          const eventos = await res.json();
+          const list = document.getElementById('eventos-list');
+          list.innerHTML = '';
+          if (eventos.length === 0) {
+            list.innerHTML = '<li class="text-slate-500 italic">Sin eventos recientes</li>';
+            return;
+          }
+          eventos.forEach(ev => {
+            const li = document.createElement('li');
+            li.innerHTML = `<span class='text-slate-400'>[${ev.timestamp.split('T')[0]}]</span> <span>${ev.evento}</span> <span class='text-slate-500'>${ev.detalle}</span>`;
+            list.appendChild(li);
+          });
+        } catch (e) {
+          document.getElementById('eventos-list').innerHTML = '<li class="text-slate-500 italic">Error al cargar eventos</li>';
+        }
+      }
+      function paginaEventos(delta) {
+        const nuevaPagina = Math.max(1, paginaActual + delta);
+        aplicarFiltroEventos(nuevaPagina);
+      }
+      // Inicializar eventos en página 1
+      aplicarFiltroEventos(1);
+
+      // --- Eventos recientes ---
+      async function updateEventos() {
+        try {
+          const res = await fetch('/api/eventos');
+          const eventos = await res.json();
+          const list = document.getElementById('eventos-list');
+          list.innerHTML = '';
+          if (eventos.length === 0) {
+            list.innerHTML = '<li class="text-slate-500 italic">Sin eventos recientes</li>';
+            return;
+          }
+          eventos.forEach(ev => {
+            const li = document.createElement('li');
+            li.innerHTML = `<span class='text-slate-400'>[${ev.timestamp.split('T')[0]}]</span> <span>${ev.evento}</span> <span class='text-slate-500'>${ev.detalle}</span>`;
+            list.appendChild(li);
+          });
+        } catch (e) {
+          document.getElementById('eventos-list').innerHTML = '<li class="text-slate-500 italic">Error al cargar eventos</li>';
+        }
+      }
+      updateEventos();
+      setInterval(updateEventos, 10000);
+
+      // --- Healthcheck de procesos ---
+      async function updateHealth() {
+        try {
+          const res = await fetch('/api/health');
+          const health = await res.json();
+          const list = document.getElementById('health-list');
+          list.innerHTML = '';
+          health.forEach(proc => {
+            const color = proc.running ? 'text-green-400' : 'text-red-400';
+            const status = proc.running ? 'Activo' : 'Detenido';
+            list.innerHTML += `<li><span class="${color}">${proc.name}</span>: <span class="${color}">${status}</span></li>`;
+          });
+        } catch (e) {
+          document.getElementById('health-list').innerHTML = '<li class="text-slate-500 italic">Error al cargar estado</li>';
+        }
+      }
+      updateHealth();
+      setInterval(updateHealth, 10000);
+
       // Resize observer
       new ResizeObserver((entries) => {
         if (entries.length === 0 || entries[0].target !== chartContainer) {
@@ -179,6 +319,53 @@
         const newRect = entries[0].contentRect;
         chart.applyOptions({ height: newRect.height, width: newRect.width });
       }).observe(chartContainer);
+
+      // --- Procesos monitoreados ---
+      let procesosActuales = [];
+      async function cargarProcesos() {
+        try {
+          const res = await fetch('/api/procesos');
+          procesosActuales = await res.json();
+          renderProcesos();
+        } catch (e) {
+          document.getElementById('procesos-list').innerHTML = '<li class="text-slate-500 italic">Error al cargar procesos</li>';
+        }
+      }
+      function renderProcesos() {
+        const list = document.getElementById('procesos-list');
+        list.innerHTML = '';
+        procesosActuales.forEach((proc, idx) => {
+          const li = document.createElement('li');
+          li.innerHTML = `<span class='text-slate-400'>${proc.nombre}</span> <span class='text-slate-500'>${proc.comando.join(' ')}</span> <button onclick='eliminarProceso(${idx})' class='bg-red-700 text-white px-1 rounded ml-2'>Eliminar</button>`;
+          list.appendChild(li);
+        });
+      }
+      async function agregarProceso() {
+        const nombre = document.getElementById('nuevo-nombre').value.trim();
+        const comando = document.getElementById('nuevo-comando').value.trim();
+        if (!nombre || !comando) return alert('Completa ambos campos');
+        procesosActuales.push({nombre, comando: comando.split(' ')});
+        await guardarProcesos();
+        document.getElementById('nuevo-nombre').value = '';
+        document.getElementById('nuevo-comando').value = '';
+      }
+      async function eliminarProceso(idx) {
+        procesosActuales.splice(idx, 1);
+        await guardarProcesos();
+      }
+      async function guardarProcesos() {
+        try {
+          await fetch('/api/procesos/update', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(procesosActuales)
+          });
+          cargarProcesos();
+        } catch (e) {
+          alert('Error al guardar procesos');
+        }
+      }
+      cargarProcesos();
     </script>
   </body>
 </html>

@@ -1,0 +1,4 @@
+[
+    {"nombre": "main.py", "comando": ["python3", "main.py"]},
+    {"nombre": "memoria.py", "comando": ["python3", "memoria.py"]}
+]
