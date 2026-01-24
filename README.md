@@ -74,3 +74,15 @@ pytest tests/
 ## ⚠️ Disclaimer
 
 Este software es para fines educativos. El trading de criptomonedas conlleva alto riesgo. Usa el **Modo Testnet** (ver `docs/TESTING.md`) antes de arriesgar capital real.
+
+---
+
+## 📱 Notas de Despliegue en Teléfono (Android)
+
+Si intentas ejecutar Argos directamente en un teléfono Android conectado por ADB, ten en cuenta lo siguiente:
+
+- Se implementó un *modo degradado* en `main.py` para permitir la ejecución en dispositivos donde no se pueden compilar paquetes nativos como `cryptography`, `numpy` o `pandas`.
+- Revisa `BITACORA.md` para ver el registro completo de intentos, librerías nativas subidas y las dependencias que no pudieron instalarse en el dispositivo.
+
+Archivo de bitácora: [BITACORA.md](BITACORA.md)
+

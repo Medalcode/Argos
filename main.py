@@ -1,10 +1,12 @@
 import os
 import sys
 
-# Mock numba if it's missing (common in Termux)
+# Mock or make optional heavy imports so the app can run in degraded mode on-device
+HAS_NUMBA = True
 try:
     import numba
-except ImportError:
+except Exception:
+    HAS_NUMBA = False
     from unittest.mock import MagicMock
     mock_numba = MagicMock()
     mock_numba.njit = lambda f=None, *args, **kwargs: f if f else lambda x: x
@@ -14,9 +16,22 @@ except ImportError:
 import time
 import requests
 import datetime
-import ccxt
-import pandas as pd
-import pandas_ta as ta
+# Optional heavy libs
+HAS_CCXT = True
+HAS_PANDAS = True
+HAS_PANDAS_TA = True
+try:
+    import ccxt
+except Exception:
+    HAS_CCXT = False
+try:
+    import pandas as pd
+except Exception:
+    HAS_PANDAS = False
+try:
+    import pandas_ta as ta
+except Exception:
+    HAS_PANDAS_TA = False
 import logging
 from logging.handlers import RotatingFileHandler
 from rich.console import Console
@@ -57,16 +72,29 @@ console = Console()
 # Configuración del Exchange (Binance por defecto)
 # Se usa 'enableRateLimit': True para respetar los límites de la API
 exchange_id = 'binance'
-exchange_class = getattr(ccxt, exchange_id)
-exchange = exchange_class({
-    'apiKey': os.getenv('BINANCE_API_KEY'),
-    'secret': os.getenv('BINANCE_SECRET_KEY'),
-    'enableRateLimit': True,
-    'options': {'defaultType': 'spot'} 
-})
-
-# Si estamos en modo TESTNET (Sandbox), descomentar las siguientes líneas si el exchange lo soporta
-exchange.set_sandbox_mode(True) 
+exchange = None
+if HAS_CCXT:
+    try:
+        exchange_class = getattr(ccxt, exchange_id)
+        exchange = exchange_class({
+            'apiKey': os.getenv('BINANCE_API_KEY'),
+            'secret': os.getenv('BINANCE_SECRET_KEY'),
+            'enableRateLimit': True,
+            'options': {'defaultType': 'spot'} 
+        })
+        # Si estamos en modo TESTNET (Sandbox), activar si el exchange lo soporta
+        try:
+            exchange.set_sandbox_mode(True)
+        except Exception:
+            pass
+    except Exception as e:
+        logger = logging.getLogger('ArgosBot') if 'logger' in globals() else None
+        if logger:
+            logger.warning(f"ccxt cargado pero no se pudo inicializar exchange: {e}")
+        exchange = None
+else:
+    # En modo degradado no hay acceso a ccxt; desactivar trading en vivo
+    pass
 
 SYMBOL = os.getenv('SYMBOL', 'BTC/USDT')
 # Parsear porcentajes
@@ -165,28 +193,43 @@ def obtener_datos():
     Obtiene las velas y calcula indicadores.
     """
     try:
-        # Fetch OHLCV 
-        # Testnet tiene datos limitados, usamos lo que nos da
+        # Si no disponemos de pandas/ccxt/pandas_ta, devolvemos un objeto vacío para evitar fallos
+        if not (HAS_CCXT and HAS_PANDAS and HAS_PANDAS_TA and exchange is not None):
+            logger.warning("Modo degradado: indicadores desactivados por falta de dependencias (ccxt/pandas/pandas_ta).")
+            class DummyDF:
+                def __init__(self):
+                    self.empty = True
+                def __getitem__(self, key):
+                    raise KeyError
+            return DummyDF()
+
+        # Fetch OHLCV
         velas = exchange.fetch_ohlcv(SYMBOL, timeframe='15m', limit=500)
         df = pd.DataFrame(velas, columns=['ts', 'open', 'high', 'low', 'close', 'vol'])
-        
         logger.debug(f"Datos recibidos: {len(df)} velas")
-        
+
         # Calcular RSI 14
         df['RSI'] = ta.rsi(df['close'], length=14)
-        
+
         # Calcular Bollinger (20, 2)
         bbands = ta.bbands(df['close'], length=20, std=2)
         df = pd.concat([df, bbands], axis=1)
-        
+
         # Calcular EMA 20 (ajustado para testnet con datos limitados)
-        # En producción con más datos, cambiar a EMA 200
         df['EMA_200'] = ta.ema(df['close'], length=20)
-        
+
         return df
     except Exception as e:
         logger.error(f"Error obteniendo datos: {e}", exc_info=True)
-        return pd.DataFrame()
+        try:
+            return pd.DataFrame()
+        except Exception:
+            class DummyDF:
+                def __init__(self):
+                    self.empty = True
+                def __getitem__(self, key):
+                    raise KeyError
+            return DummyDF()
 
 # Variable para no repetir comandos viejos
 ultimo_update_id = 0
@@ -292,6 +335,53 @@ def generar_dashboard(precio, rsi, ema, tendencia, posicion_abierta, estado):
     
     return tabla
 
+def run_degraded_loop():
+    """Loop degradado: sin ccxt/pandas. Obtiene precio público y registra actividad mínima."""
+    logger.warning("Iniciando modo degradado: características avanzadas deshabilitadas (ccxt/pandas).")
+    while True:
+        try:
+            # Intentar obtener precio público desde Binance (sin criptografía)
+            try:
+                sym = SYMBOL.replace('/','')
+                r = requests.get(f"https://api.binance.com/api/v3/ticker/price?symbol={sym}", timeout=5)
+                price = float(r.json().get('price', 0)) if r.status_code == 200 else 0.0
+            except Exception as e:
+                logger.error(f"Error fetching public price: {e}")
+                price = 0.0
+
+            # Valores por defecto para indicadores en modo degradado
+            precio_actual = price
+            rsi_actual = 50.0
+            ema_200 = precio_actual
+
+            status_msg = f"[{datetime.datetime.now().strftime('%H:%M:%S')}] P: ${precio_actual:.2f} | RSI: {rsi_actual:.2f} | MODO DEGRADADO"
+            logger.info(status_msg)
+
+            # Procesar comandos mínimos vía Telegram (solo /status y /saldo)
+            try:
+                token = os.getenv('TELEGRAM_TOKEN')
+                if token:
+                    url = f"https://api.telegram.org/bot{token}/getUpdates"
+                    resp = requests.get(url, timeout=5)
+                    data = resp.json()
+                    if data.get('ok'):
+                        for result in data.get('result', []):
+                            texto = result.get('message', {}).get('text', '').lower().strip()
+                            if texto == '/status':
+                                enviar_telegram(f"📊 STATUS (degradado)\nPrecio: ${precio_actual:.2f}\nModo: degradado\nPNL Acum: {estado.get('pnl_acumulado',0):.2f}%")
+                            if texto == '/saldo':
+                                pnl = estado.get('pnl_acumulado', 0.0)
+                                saldo_est = 1000 * (1 + pnl/100)
+                                enviar_telegram(f"💵 Saldo Estimado: ${saldo_est:.2f}\nPnL: {pnl:.2f}%")
+            except Exception as e:
+                logger.debug(f"Error procesando comandos degradados: {e}")
+
+            time.sleep(60)
+        except Exception as e:
+            logger.error(f"Error en loop degradado: {e}", exc_info=True)
+            time.sleep(30)
+
+
 # 2. Loop Principal
 logger.info(f"=== ARGOS BOT INICIADO PARA {SYMBOL} ===")
 modo_msg = "MODO SIMULACIÓN (PAPER TRADING)" if SIMULATION_MODE else "MODO REAL (DINERO REAL)"
@@ -310,6 +400,10 @@ console.print("[bold green]═════════════════�
 console.print("\n")
 
 enviar_telegram(f"🤖 **Argos Bot Iniciado**\\n{modo_msg}\\nPar: {SYMBOL}\\nEstrategia: RSI + Bollinger + EMA20 + Trailing")
+
+# Si faltan dependencias pesadas, ejecutamos un loop degradado y salimos del flujo completo
+if not (HAS_CCXT and HAS_PANDAS and HAS_PANDAS_TA and exchange):
+    run_degraded_loop()
 
 while True:
     try:
